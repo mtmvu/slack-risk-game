@@ -1,6 +1,7 @@
 from random import shuffle
 
 from django.db import models
+from django_fsm import FSMField, transition, GET_STATE
 
 
 class Player(models.Model):
@@ -23,13 +24,18 @@ class Continent(models.Model):
 
 
 class Game(models.Model):
-    is_active = models.BooleanField(default=True)
+    state = FSMField(default='new')
 
+    def is_active(self):
+        return self.state != 'finished'
+
+    @transition(field=state, source='new', target='waiting_for_reinforcements')
     def init(self, players):
         self._set_players(players)
         self._distribute_territories()
         self._distribute_reinforcements()
 
+    @transition(field=state, source='waiting_for_reinforcements', target='started')
     def start(self, players):
         pass
 
@@ -60,7 +66,7 @@ class Game(models.Model):
             reinforcements = 20
 
         for player in players:
-            player.reinforcements = reinforcements
+            player.set_initial_reinforcements(reinforcements)
             player.save()
 
 
@@ -68,9 +74,9 @@ class PlayerGame(models.Model):
     game = models.ForeignKey("Game")
     player = models.ForeignKey("Player")
     color = models.CharField(max_length=50)
-    is_active = models.BooleanField(default=False)
     turn_order = models.IntegerField(default=0)
     reinforcements = models.IntegerField(default=0)
+    state = FSMField(default='waiting_for_turn')
 
     def owns_continents(self):
         for continent in Continent.objects.all():
@@ -80,8 +86,26 @@ class PlayerGame(models.Model):
             if continent_territories == player_territories:
                 yield continent
 
-    def get_reinforcements(self):
+    @transition(field=state, source='waiting_for_turn', target='reinforcement_phase')
+    def set_initial_reinforcements(self, n):
+        self.reinforcements += n
+
+    def set_reinforcements(self):
         pass
+
+    def can_reinforce(self):
+        return self.reinforcements > 0
+
+    @transition(field=state,
+                source='reinforcement_phase',
+                target=GET_STATE(
+                    lambda self: 'reinforcement_phase' if self.can_reinforce() else 'attack_phase',
+                    states=['reinforcement_phase', 'attack_phase']
+                ),
+                conditions=[can_reinforce])
+    def reinforce(self, n, territory):
+        if n > self.reinforcements:
+            raise
 
 
 class TerritoryGame(models.Model):
