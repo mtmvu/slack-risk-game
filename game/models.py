@@ -78,7 +78,7 @@ class PlayerGame(models.Model):
     reinforcements = models.IntegerField(default=0)
     state = FSMField(default='waiting_for_turn')
 
-    def owns_continents(self):
+    def continents(self):
         for continent in Continent.objects.all():
             continent_territories = continent.territory_set.count()
             player_territories = self.territorygame_set.filter(
@@ -87,25 +87,56 @@ class PlayerGame(models.Model):
                 yield continent
 
     @transition(field=state, source='waiting_for_turn', target='reinforcement_phase')
+    def new_turn(self):
+        self.set_reinforcements()
+
+    @transition(field=state, source=['attack_phase', 'move_phase'], target='waiting_for_turn')
+    def end_turn(self):
+        pass
+
+    @transition(field=state, source='waiting_for_turn', target='initial_reinforcement_phase')
     def set_initial_reinforcements(self, n):
         self.reinforcements += n
 
     def set_reinforcements(self):
-        pass
+        territory_bonus = min(3, int(self.territorygame_set.count() / 3))
+        continent_bonus = 0
+        for continent in self.continents():
+            continent_bonus += continent.bonus
+
+        self.reinforcements += territory_bonus + continent_bonus
 
     def can_reinforce(self):
         return self.reinforcements > 0
 
+    def reinforce_state(self):
+        if self.can_reinforce():
+            return self.state
+
+        if self.state == 'reinforcement_phase':
+            return 'attack_phase'
+        elif self.state == 'initial_reinforcement_phase':
+            return 'waiting_for_turn'
+
     @transition(field=state,
-                source='reinforcement_phase',
+                source=['initial_reinforcement_phase', 'reinforcement_phase'],
                 target=GET_STATE(
-                    lambda self: 'reinforcement_phase' if self.can_reinforce() else 'attack_phase',
-                    states=['reinforcement_phase', 'attack_phase']
+                    lambda self: self.reinforce_state(),
+                    states=['initial_reinforcement_phase',
+                            'reinforcement_phase', 'attack_phase']
                 ),
                 conditions=[can_reinforce])
     def reinforce(self, n, territory):
         if n > self.reinforcements:
             raise
+
+        try:
+            territory = self.territorygame_set.get(territory__name=territory)
+        except Exception:
+            raise
+
+        territory.army += n
+        territory.save()
 
 
 class TerritoryGame(models.Model):
