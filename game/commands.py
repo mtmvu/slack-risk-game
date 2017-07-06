@@ -13,7 +13,10 @@ class Command:
         self.text = data['text']
 
     def execute(self):
-        action, arguments = Command.parse_command(self.text)
+        try:
+            action, arguments = Command.parse_command(self.text)
+        except ValidationException as e:
+            return e
 
     def validate(self):
         pass
