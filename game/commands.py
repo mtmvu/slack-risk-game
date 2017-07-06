@@ -40,6 +40,7 @@ class Command:
 
 
 class GameCommand:
+
     def __init__(self, user_id, user_name, action, arguments):
         self.user_id = user_id
         self.user_name = user_name
@@ -50,16 +51,16 @@ class GameCommand:
         self.player_game = None
 
     def execute(self):
-        if self.action == "new":
-            pass
         self.player = GameCommand.get_player()
-        GameCommand.get_game()
+        if self.action == "new":
+            self.new_game()
 
     def get_player(user_id, user_name):
-        try:
-            player = models.Player.objects.get(slack_id=user_id)
-            player.update(name=user_name)
-        except models.Player.DoesNotExist:
-            raise ValidationException("Player does not exist")
-
+        player, _ = models.Player.objects.update_or_create(
+            slack_id=user_id, defaults={"name": user_name})
         return player
+
+    def new_game(self):
+        for player_game in self.player.playergame_set.all():
+            if player_game.game.is_active():
+                raise ValidationException('Already in a game')
