@@ -12,6 +12,13 @@ class Player(models.Model):
     def __str__(self):
         return f"<@{self.slack_id}|{self.name}>"
 
+    def is_in_game(self):
+        for player_game in self.playergame_set.all():
+            if player_game.game.is_active():
+                return True
+
+        return False
+
 
 class Territory(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -42,10 +49,13 @@ class Game(models.Model):
     def start(self, players):
         pass
 
+    @transition(field=state, source='started', targer='finished')
+    def end(self):
+        pass
+
     def _set_players(self, players):
         for player in players:
-            p, _ = Player.objects.get_or_create(slack_id=player)
-            PlayerGame.objects.create(game=self, player=p, color='black')
+            PlayerGame.objects.create(game=self, player=player, color='black')
 
     def _distribute_territories(self):
         players = self.playergame_set.all()
