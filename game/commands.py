@@ -1,3 +1,5 @@
+import re
+
 from game import models
 
 
@@ -50,17 +52,26 @@ class GameCommand:
         self.game = None
         self.player_game = None
 
-    def execute(self):
-        self.player = GameCommand.get_player()
-        if self.action == "new":
-            self.new_game()
-
-    def get_player(user_id, user_name):
+    def get_player(user_id=None, user_name=None):
         player, _ = models.Player.objects.update_or_create(
             slack_id=user_id, defaults={"name": user_name})
         return player
 
-    def new_game(self):
-        for player_game in self.player.playergame_set.all():
+    def get_player_game(player):
+        for player_game in player.playergame_set.all():
             if player_game.game.is_active():
-                raise ValidationException('Already in a game')
+                return player_game
+
+    def parse_players(arguments):
+        pattern = r"<@([^)]+?)>"
+        matches = re.findall(pattern, arguments)
+
+    def execute(self):
+        self.player = GameCommand.get_player(self.user_id, self.user_name)
+        self.player_game = GameCommand.get_player_game(self.player)
+        if self.action == "new":
+            self.new_game()
+
+    def new_game(self):
+        if self.player_game:
+            raise ValidationException('Already in a game')

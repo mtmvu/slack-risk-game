@@ -9,6 +9,9 @@ class Player(models.Model):
     slack_id = models.CharField(max_length=50, unique=True)
     score = models.IntegerField(default=0)
 
+    def __str__(self):
+        return f"<@{self.slack_id}|{self.name}>"
+
 
 class Territory(models.Model):
     name = models.CharField(max_length=50, unique=True)
